@@ -1,3 +1,6 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package inspector2
 
 import (
@@ -57,7 +60,7 @@ const (
 )
 
 func resourceDelegatedAdminAccountCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).Inspector2Client()
+	conn := meta.(*conns.AWSClient).Inspector2Client(ctx)
 
 	in := &inspector2.EnableDelegatedAdminAccountInput{
 		DelegatedAdminAccountId: aws.String(d.Get("account_id").(string)),
@@ -84,12 +87,12 @@ func resourceDelegatedAdminAccountCreate(ctx context.Context, d *schema.Resource
 }
 
 func resourceDelegatedAdminAccountRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).Inspector2Client()
+	conn := meta.(*conns.AWSClient).Inspector2Client(ctx)
 
 	st, ai, err := FindDelegatedAdminAccountStatusID(ctx, conn, d.Id())
 
 	if !d.IsNewResource() && tfresource.NotFound(err) {
-		log.Printf("[WARN] Inspector V2 Delegated Admin Account (%s) not found, removing from state", d.Id())
+		log.Printf("[WARN] Inspector Delegated Admin Account (%s) not found, removing from state", d.Id())
 		d.SetId("")
 		return nil
 	}
@@ -105,9 +108,9 @@ func resourceDelegatedAdminAccountRead(ctx context.Context, d *schema.ResourceDa
 }
 
 func resourceDelegatedAdminAccountDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	conn := meta.(*conns.AWSClient).Inspector2Client()
+	conn := meta.(*conns.AWSClient).Inspector2Client(ctx)
 
-	log.Printf("[INFO] Deleting Inspector2 DelegatedAdminAccount %s", d.Id())
+	log.Printf("[INFO] Deleting Inspector DelegatedAdminAccount %s", d.Id())
 
 	_, err := conn.DisableDelegatedAdminAccount(ctx, &inspector2.DisableDelegatedAdminAccountInput{
 		DelegatedAdminAccountId: aws.String(d.Get("account_id").(string)),
@@ -207,12 +210,11 @@ func FindDelegatedAdminAccountStatusID(ctx context.Context, conn *inspector2.Cli
 	for pages.HasMorePages() {
 		page, err := pages.NextPage(ctx)
 
-		if err != nil {
-			var ve types.ValidationException
-			if errs.AsContains(err, &ve, "is the delegated admin") {
-				return string(types.RelationshipStatusEnabled), accountID, nil
-			}
+		if errs.IsAErrorMessageContains[*types.ValidationException](err, "is the delegated admin") {
+			return string(types.RelationshipStatusEnabled), accountID, nil
+		}
 
+		if err != nil {
 			return "", "", err
 		}
 
